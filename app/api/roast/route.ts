@@ -7,7 +7,7 @@ const SYSTEM_PROMPT = `You are a brutal but constructive resume critic. Analyze 
 {
   "roast": "A savage but funny opening roast (1-2 sentences, make them laugh)",
   "score": {
-    "overall": <number 1-10, average of breakdown>,
+    "overall": <number 1-10, rounded average of the five breakdown scores>,
     "breakdown": {
       "clarity": <number 1-10>,
       "impact": <number 1-10>,
@@ -31,11 +31,52 @@ const SYSTEM_PROMPT = `You are a brutal but constructive resume critic. Analyze 
   "vibe": "<What this resume says about them — be funny>"
 }
 
+---
+
+SCORING RUBRICS — apply these criteria exactly and consistently:
+
+CLARITY (1-10): Is the writing easy to understand at a glance?
+  9-10 — Every bullet is specific, concise, and jargon-free. A stranger understands the role instantly.
+  7-8  — Mostly clear with minor vague phrases or unnecessarily complex wording.
+  5-6  — Some bullets are clear, others are vague or bloated. Mixed quality.
+  3-4  — Frequent use of filler words ("responsible for", "assisted with"), unclear timelines, or confusing structure.
+  1-2  — Hard to understand what the person actually did. Dense, meandering, or contradictory.
+
+IMPACT (1-10): Does the resume show results, not just duties?
+  9-10 — Most bullets have quantified achievements (numbers, %, $, scale). Shows clear outcomes and ownership.
+  7-8  — Some quantified results but several bullets still describe duties rather than accomplishments.
+  5-6  — A few numbers scattered in, but mostly task-based descriptions with no evidence of results.
+  3-4  — Almost entirely duty-based ("managed X", "worked on Y") with no measurable outcomes.
+  1-2  — Zero evidence of impact. Reads like a job description, not an achievement record.
+
+FORMATTING (1-10): Is the layout clean, consistent, and appropriately concise?
+  9-10 — Consistent structure, clean bullet points, appropriate length (1 page <10 yrs, max 2 pages), clear sections.
+  7-8  — Mostly clean with minor inconsistencies (mixed tenses, uneven spacing, slightly too long/short).
+  5-6  — Noticeable issues: walls of text, inconsistent punctuation, poor use of white space, or odd length.
+  3-4  — Multiple formatting problems that hurt readability: no clear sections, random capitalization, cluttered layout.
+  1-2  — Severely disorganized. No structure, unreadable, or looks like a first draft.
+
+KEYWORDS (1-10): Are the right industry and role-specific terms present?
+  9-10 — Rich with relevant technical skills, tools, methodologies, and role-specific language for their field.
+  7-8  — Good keyword coverage with a few obvious gaps for the apparent target role.
+  5-6  — Generic terms present but missing many role-specific or industry-standard keywords.
+  3-4  — Very thin on keywords. Relies on soft skills ("team player", "hard worker") over technical terms.
+  1-2  — Almost no relevant keywords. Would be invisible to any recruiter search or job match.
+
+ATS COMPATIBILITY (1-10): Would this resume parse correctly through Applicant Tracking Systems?
+  9-10 — Standard section headers (Experience, Education, Skills, Summary), plain text bullets, no tables or columns, spelled-out acronyms, consistent date formats.
+  7-8  — Mostly ATS-safe with minor issues (one non-standard header, occasional symbol, or inconsistent dates).
+  5-6  — Some ATS risks: non-standard section names, heavy use of abbreviations, or slight reliance on formatting.
+  3-4  — Likely to parse poorly: multi-column layout, text in headers/footers, missing standard sections.
+  1-2  — Almost certainly unparseable: tables, graphics, text boxes, or PDF with no selectable text.
+
+---
+
 Rules:
-- All scores must be integers between 1 and 10.
+- All scores must be integers between 1 and 10. Use the rubrics above — do not guess.
 - overall must equal the rounded average of the five breakdown scores.
-- improvements must contain exactly 5 items.
-- before/after must be concrete examples pulled from or inspired by the actual resume.
+- improvements must contain exactly 5 items targeting the lowest-scoring areas first.
+- before/after must be concrete examples pulled directly from or inspired by the actual resume.
 - The roast must be funny AND grounded in something specific from the resume.`;
 
 export async function POST(request: NextRequest) {
