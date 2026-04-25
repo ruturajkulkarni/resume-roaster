@@ -7,6 +7,7 @@ import {
   DragEvent,
   ChangeEvent,
 } from "react";
+import { supabase, HistoryItem } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,7 +35,7 @@ interface RoastResult {
   vibe: string;
 }
 
-type Status = "idle" | "extracting" | "roasting" | "done" | "error";
+type Status = "idle" | "extracting" | "roasting" | "done" | "error" | "history";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -63,13 +64,23 @@ function formatBytes(bytes: number): string {
 }
 
 function scoreColor(n: number): string {
-  if (n <= 4) return "#ef4444"; // red
-  if (n <= 7) return "#eab308"; // yellow
-  return "#22c55e"; // green
+  if (n <= 4) return "#ef4444";
+  if (n <= 7) return "#eab308";
+  return "#22c55e";
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Shared sub-components
 // ---------------------------------------------------------------------------
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
@@ -103,15 +114,11 @@ function ImprovementCard({ item }: { item: Improvement }) {
       </p>
       <div className="grid sm:grid-cols-2 gap-2 text-sm">
         <div className="rounded-lg bg-red-50 border border-red-100 p-3">
-          <p className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-1">
-            Before
-          </p>
+          <p className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-1">Before</p>
           <p className="text-gray-700 leading-snug">{item.before}</p>
         </div>
         <div className="rounded-lg bg-green-50 border border-green-100 p-3">
-          <p className="text-xs font-semibold text-green-500 uppercase tracking-wide mb-1">
-            After
-          </p>
+          <p className="text-xs font-semibold text-green-500 uppercase tracking-wide mb-1">After</p>
           <p className="text-gray-700 leading-snug">{item.after}</p>
         </div>
       </div>
@@ -119,50 +126,42 @@ function ImprovementCard({ item }: { item: Improvement }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Results card (used for both fresh roasts and history detail)
+// ---------------------------------------------------------------------------
+
 function ResultsCard({
   result,
   fileName,
-  onRoastAnother,
+  primaryAction,
 }: {
   result: RoastResult;
   fileName: string;
-  onRoastAnother: () => void;
+  primaryAction: { label: string; onClick: () => void };
 }) {
   const overall = result.score.overall;
-
   return (
     <div className="flex flex-col min-h-screen bg-[#1a1a1a] px-4 py-10">
       <div className="mx-auto w-full max-w-2xl animate-fade-in">
-        {/* Card */}
         <div className="rounded-2xl bg-white shadow-2xl overflow-hidden">
           {/* Card header */}
           <div className="bg-[#1a1a1a] px-6 py-5 flex items-center justify-between">
             <div>
-              <p className="text-xs text-white/40 uppercase tracking-widest mb-0.5">
-                Roast complete
-              </p>
-              <p className="text-white font-semibold truncate max-w-xs">
-                📄 {fileName}
-              </p>
+              <p className="text-xs text-white/40 uppercase tracking-widest mb-0.5">Roast complete</p>
+              <p className="text-white font-semibold truncate max-w-xs">📄 {fileName}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-white/40 mb-0.5">Overall Score</p>
-              <p
-                className="text-3xl font-extrabold"
-                style={{ color: scoreColor(overall) }}
-              >
-                {overall}
-                <span className="text-lg text-white/30">/10</span>
+              <p className="text-3xl font-extrabold" style={{ color: scoreColor(overall) }}>
+                {overall}<span className="text-lg text-white/30">/10</span>
               </p>
             </div>
           </div>
 
           <div className="px-6 py-6 space-y-8">
-            {/* Opening roast */}
+            {/* Roast */}
             <div className="animate-fade-in">
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
-                🔥 The Roast
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">🔥 The Roast</p>
               <p className="text-lg font-bold text-[#ff6b6b] leading-snug">
                 &ldquo;{result.roast}&rdquo;
               </p>
@@ -170,56 +169,37 @@ function ResultsCard({
 
             {/* Score breakdown */}
             <div className="animate-fade-in-delay">
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
-                📊 Score Breakdown
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">📊 Score Breakdown</p>
               <div className="space-y-3">
-                {(
-                  Object.entries(result.score.breakdown) as [
-                    keyof ScoreBreakdown,
-                    number
-                  ][]
-                ).map(([key, value]) => (
-                  <ScoreBar
-                    key={key}
-                    label={SCORE_LABELS[key]}
-                    value={value}
-                  />
-                ))}
+                {(Object.entries(result.score.breakdown) as [keyof ScoreBreakdown, number][]).map(
+                  ([key, value]) => <ScoreBar key={key} label={SCORE_LABELS[key]} value={value} />
+                )}
               </div>
             </div>
 
             {/* Improvements */}
             <div className="animate-fade-in-delay">
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">
-                ✏️ Top 5 Improvements
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">✏️ Top 5 Improvements</p>
               <div className="space-y-3">
-                {result.improvements.map((item) => (
-                  <ImprovementCard key={item.number} item={item} />
-                ))}
+                {result.improvements.map((item) => <ImprovementCard key={item.number} item={item} />)}
               </div>
             </div>
 
             {/* Vibe */}
             <div className="animate-fade-in-delay rounded-xl bg-[#fff8f8] border border-[#ff6b6b]/20 px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[#ff6b6b] mb-1">
-                💬 Overall Vibe
-              </p>
-              <p className="text-gray-700 italic leading-relaxed">
-                &ldquo;{result.vibe}&rdquo;
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-[#ff6b6b] mb-1">💬 Overall Vibe</p>
+              <p className="text-gray-700 italic leading-relaxed">&ldquo;{result.vibe}&rdquo;</p>
             </div>
           </div>
 
-          {/* Roast another */}
+          {/* Primary action */}
           <div className="px-6 pb-6">
             <button
               type="button"
-              onClick={onRoastAnother}
+              onClick={primaryAction.onClick}
               className="w-full rounded-full border-2 border-[#ff6b6b] py-3 text-sm font-bold text-[#ff6b6b] transition-colors hover:bg-[#ff6b6b] hover:text-white active:scale-95"
             >
-              🔄 Roast Another Resume
+              {primaryAction.label}
             </button>
           </div>
         </div>
@@ -232,6 +212,10 @@ function ResultsCard({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Loading screen
+// ---------------------------------------------------------------------------
+
 function LoadingView({ status }: { status: "extracting" | "roasting" }) {
   return (
     <div className="flex flex-col min-h-screen bg-[#1a1a1a] items-center justify-center gap-5 px-6">
@@ -240,21 +224,15 @@ function LoadingView({ status }: { status: "extracting" | "roasting" }) {
           <span
             key={i}
             className="w-3 h-3 rounded-full bg-[#ff6b6b]"
-            style={{
-              animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-            }}
+            style={{ animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }}
           />
         ))}
       </div>
       <p className="text-white text-lg font-medium">
-        {status === "extracting"
-          ? "Extracting text from your resume…"
-          : "Roasting your resume…"}
+        {status === "extracting" ? "Extracting text from your resume…" : "Roasting your resume…"}
       </p>
       {status === "roasting" && (
-        <p className="text-white/40 text-sm">
-          Preparing brutal honesty. This takes a few seconds.
-        </p>
+        <p className="text-white/40 text-sm">Preparing brutal honesty. This takes a few seconds.</p>
       )}
       <style>{`
         @keyframes pulse {
@@ -262,6 +240,110 @@ function LoadingView({ status }: { status: "extracting" | "roasting" }) {
           50% { transform: scale(1); opacity: 1; }
         }
       `}</style>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// History view
+// ---------------------------------------------------------------------------
+
+function HistoryView({
+  onBack,
+  onSelectItem,
+}: {
+  onBack: () => void;
+  onSelectItem: (item: HistoryItem) => void;
+}) {
+  const [items, setItems] = useState<HistoryItem[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // Fetch on mount
+  useState(() => {
+    if (!supabase) {
+      setFetchError("Supabase is not configured.");
+      setLoading(false);
+      return;
+    }
+    supabase
+      .from("roasts")
+      .select("id, created_at, roast_response")
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(({ data, error }) => {
+        if (error) {
+          setFetchError(error.message);
+        } else {
+          setItems(data as HistoryItem[]);
+        }
+        setLoading(false);
+      });
+  });
+
+  return (
+    <div className="flex flex-col min-h-screen bg-[#1a1a1a] px-4 py-10">
+      <div className="mx-auto w-full max-w-2xl">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <button
+            onClick={onBack}
+            className="text-white/50 hover:text-white transition-colors text-sm flex items-center gap-1"
+          >
+            ← Back
+          </button>
+          <h2 className="text-white text-xl font-bold">Roast History</h2>
+        </div>
+
+        {loading && (
+          <div className="text-center text-white/40 py-20">Loading…</div>
+        )}
+
+        {fetchError && (
+          <div className="rounded-xl bg-red-950/40 border border-red-800/50 px-4 py-3 text-sm text-red-300 text-center">
+            {fetchError}
+          </div>
+        )}
+
+        {!loading && !fetchError && items?.length === 0 && (
+          <div className="text-center text-white/40 py-20">
+            <p className="text-4xl mb-4">🔥</p>
+            <p>No roasts yet. Upload a resume to get started!</p>
+          </div>
+        )}
+
+        {items && items.length > 0 && (
+          <div className="space-y-3 animate-fade-in">
+            {items.map((item) => {
+              const overall = item.roast_response.score.overall;
+              const color = scoreColor(overall);
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectItem(item)}
+                  className="w-full text-left rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 px-5 py-4 transition-all duration-150 group"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/40 mb-1">{formatDate(item.created_at)}</p>
+                      <p className="text-white/80 text-sm leading-snug line-clamp-2 group-hover:text-white transition-colors">
+                        &ldquo;{item.roast_response.roast}&rdquo;
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <p className="text-xs text-white/30 mb-0.5">Score</p>
+                      <p className="text-2xl font-extrabold" style={{ color }}>
+                        {overall}
+                        <span className="text-sm text-white/30">/10</span>
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -278,6 +360,7 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [apiError, setApiError] = useState<string | null>(null);
   const [result, setResult] = useState<RoastResult | null>(null);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
 
   // --- File validation ---
   function validateAndSetFile(candidate: File) {
@@ -286,9 +369,7 @@ export default function Home() {
       return;
     }
     if (candidate.size > MAX_SIZE_BYTES) {
-      setValidationError(
-        `File is too large (${formatBytes(candidate.size)}). Max size is 10 MB.`
-      );
+      setValidationError(`File is too large (${formatBytes(candidate.size)}). Max size is 10 MB.`);
       return;
     }
     setValidationError(null);
@@ -329,21 +410,14 @@ export default function Home() {
     setApiError(null);
 
     try {
-      // Step 1: Extract text
       setStatus("extracting");
       const formData = new FormData();
       formData.append("file", file);
 
-      const extractRes = await fetch("/api/extract", {
-        method: "POST",
-        body: formData,
-      });
+      const extractRes = await fetch("/api/extract", { method: "POST", body: formData });
       const extractData = await extractRes.json();
-      if (!extractRes.ok) {
-        throw new Error(extractData.error ?? "Failed to extract text from file.");
-      }
+      if (!extractRes.ok) throw new Error(extractData.error ?? "Failed to extract text from file.");
 
-      // Step 2: Roast
       setStatus("roasting");
       const roastRes = await fetch("/api/roast", {
         method: "POST",
@@ -351,16 +425,12 @@ export default function Home() {
         body: JSON.stringify({ resume: extractData.text }),
       });
       const roastData = await roastRes.json();
-      if (!roastRes.ok) {
-        throw new Error(roastData.error ?? "Roast failed. Please try again.");
-      }
+      if (!roastRes.ok) throw new Error(roastData.error ?? "Roast failed. Please try again.");
 
       setResult(roastData);
       setStatus("done");
     } catch (err) {
-      setApiError(
-        err instanceof Error ? err.message : "Something went wrong. Please try again."
-      );
+      setApiError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setStatus("error");
     }
   }
@@ -385,7 +455,28 @@ export default function Home() {
       <ResultsCard
         result={result}
         fileName={file?.name ?? "resume"}
-        onRoastAnother={handleRoastAnother}
+        primaryAction={{ label: "🔄 Roast Another Resume", onClick: handleRoastAnother }}
+      />
+    );
+  }
+
+  if (status === "history") {
+    if (selectedHistoryItem) {
+      return (
+        <ResultsCard
+          result={selectedHistoryItem.roast_response}
+          fileName={`Roast from ${formatDate(selectedHistoryItem.created_at)}`}
+          primaryAction={{
+            label: "← Back to History",
+            onClick: () => setSelectedHistoryItem(null),
+          }}
+        />
+      );
+    }
+    return (
+      <HistoryView
+        onBack={() => setStatus("idle")}
+        onSelectItem={(item) => setSelectedHistoryItem(item)}
       />
     );
   }
@@ -399,9 +490,20 @@ export default function Home() {
           <span className="text-2xl">🔥</span>
           <span className="text-xl font-bold tracking-tight">ResumeRoaster</span>
         </div>
-        <p className="text-sm text-white/50 hidden sm:block">
-          Get Roasted. Get Better.
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="text-sm text-white/50 hidden sm:block">Get Roasted. Get Better.</p>
+          {supabase && (
+            <button
+              onClick={() => {
+                setSelectedHistoryItem(null);
+                setStatus("history");
+              }}
+              className="text-sm text-white/50 hover:text-white transition-colors flex items-center gap-1.5 border border-white/10 hover:border-white/30 rounded-full px-3 py-1.5"
+            >
+              📋 History
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Main */}
@@ -444,63 +546,44 @@ export default function Home() {
               className="sr-only"
               onChange={handleInputChange}
             />
-
             {file ? (
               <div className="flex flex-col items-center gap-2 text-center">
-                <span className="text-4xl">
-                  {file.type === "application/pdf" ? "📄" : "🖼️"}
-                </span>
+                <span className="text-4xl">{file.type === "application/pdf" ? "📄" : "🖼️"}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-medium text-white break-all">
-                    {file.name}
-                  </span>
+                  <span className="text-base font-medium text-white break-all">{file.name}</span>
                   <button
                     type="button"
                     aria-label="Remove file"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleClear();
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handleClear(); }}
                     className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-white/20 hover:bg-[#ff6b6b] transition-colors text-xs font-bold"
                   >
                     ✕
                   </button>
                 </div>
-                <span className="text-sm text-white/40">
-                  {formatBytes(file.size)}
-                </span>
+                <span className="text-sm text-white/40">{formatBytes(file.size)}</span>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3 text-center pointer-events-none">
                 <span className="text-4xl">⬆️</span>
                 <p className="text-base font-medium text-white/80">
                   Drag your resume here or{" "}
-                  <span className="text-[#ff6b6b] underline underline-offset-2">
-                    click to upload
-                  </span>
+                  <span className="text-[#ff6b6b] underline underline-offset-2">click to upload</span>
                 </p>
-                <p className="text-sm text-white/40">
-                  PDF, JPG, PNG · Max 10 MB
-                </p>
+                <p className="text-sm text-white/40">PDF, JPG, PNG · Max 10 MB</p>
               </div>
             )}
           </div>
 
-          {/* Validation error */}
           {validationError && (
-            <p className="mt-3 text-sm text-[#ff6b6b] text-center">
-              {validationError}
-            </p>
+            <p className="mt-3 text-sm text-[#ff6b6b] text-center">{validationError}</p>
           )}
 
-          {/* API / processing error */}
           {status === "error" && apiError && (
             <div className="mt-4 rounded-xl bg-red-950/40 border border-red-800/50 px-4 py-3 text-sm text-red-300 text-center">
               {apiError}
             </div>
           )}
 
-          {/* CTA */}
           <button
             type="button"
             disabled={!file}

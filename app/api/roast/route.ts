@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 
 const SYSTEM_PROMPT = `You are a brutal but constructive resume critic. Analyze the resume and respond with ONLY valid JSON matching this exact structure — no markdown, no explanation outside the JSON:
 
@@ -115,6 +116,18 @@ export async function POST(request: NextRequest) {
         { error: "OpenAI response was missing required fields.", raw: analysis },
         { status: 502 }
       );
+    }
+
+    // Persist to Supabase — fire-and-forget so a DB failure never breaks the roast.
+    const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (sbUrl && sbKey) {
+      const db = createClient(sbUrl, sbKey);
+      db.from("roasts")
+        .insert({ resume_text: resume.trim(), roast_response: analysis })
+        .then(({ error }) => {
+          if (error) console.error("[roast] supabase insert error:", error.message);
+        });
     }
 
     return NextResponse.json(analysis);
