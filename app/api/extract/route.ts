@@ -40,25 +40,24 @@ export async function POST(request: NextRequest) {
   // --- PDF ---
   if (file.type === "application/pdf") {
     try {
-      // Use the inner lib file directly — pdf-parse's index.js reads test fixtures
-      // on load which don't exist in Vercel's serverless deployment and cause a crash.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (b: Buffer) => Promise<{ text: string }>;
-      const data = await pdfParse(buffer);
-      const text = data.text?.trim();
+      const { extractText } = await import("unpdf");
+      // extractText returns { totalPages: number, text: string } when mergePages: true
+      const { text: raw } = await extractText(new Uint8Array(buffer), { mergePages: true });
+      const text = (typeof raw === "string" ? raw : (raw as string[]).join("\n")).trim();
 
       if (!text) {
         return NextResponse.json(
-          { error: "Could not extract text from this PDF. It may be scanned or image-only. Try uploading a PNG/JPG screenshot instead." },
+          { error: "No text found in this PDF. It may be a scanned image-only PDF. Try uploading a JPG or PNG screenshot of your resume instead." },
           { status: 422 }
         );
       }
 
       return NextResponse.json({ text });
     } catch (err) {
-      console.error("[extract] pdf-parse error:", err);
+      console.error("[extract] unpdf error:", err);
+      const message = err instanceof Error ? err.message : String(err);
       return NextResponse.json(
-        { error: "Failed to parse the PDF. Make sure it is a valid, text-based PDF file." },
+        { error: `Failed to read the PDF: ${message}` },
         { status: 422 }
       );
     }
