@@ -28,6 +28,8 @@ interface Improvement {
 }
 
 interface RoastResult {
+  detectedRole: string;
+  roleCategory: string;
   roast: string;
   score: { overall: number; breakdown: ScoreBreakdown };
   improvements: Improvement[];
@@ -138,6 +140,14 @@ function ResultsCard({
             <div>
               <p className="text-xs text-white/40 uppercase tracking-widest mb-0.5">Roast complete</p>
               <p className="text-white font-semibold truncate max-w-xs">📄 {fileName}</p>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-xs text-white/50 bg-white/10 rounded-full px-2.5 py-0.5">
+                  {result.detectedRole}
+                </span>
+                <span className="text-xs text-white/30 bg-white/5 rounded-full px-2.5 py-0.5">
+                  {result.roleCategory}
+                </span>
+              </div>
             </div>
             <div className="text-right">
               <p className="text-xs text-white/40 mb-0.5">Overall Score</p>
