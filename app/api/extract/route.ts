@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
   // --- PDF ---
   if (file.type === "application/pdf") {
     try {
-      // require() instead of import: pdf-parse is CJS and its .default is undefined
+      // Use the inner lib file directly — pdf-parse's index.js reads test fixtures
+      // on load which don't exist in Vercel's serverless deployment and cause a crash.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+      const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (b: Buffer) => Promise<{ text: string }>;
       const data = await pdfParse(buffer);
       const text = data.text?.trim();
 
