@@ -57,6 +57,8 @@ Accepts `{ resume: string }`.
 Returns structured JSON:
 ```json
 {
+  "detectedRole": "Senior Software Engineer",
+  "roleCategory": "Tech & Engineering",
   "roast": "...",
   "score": { "overall": 5, "breakdown": { "clarity": 5, "impact": 4, "formatting": 6, "keywords": 4, "ats": 5 } },
   "improvements": [{ "number": 1, "title": "...", "before": "...", "after": "..." }, ...],
@@ -64,6 +66,23 @@ Returns structured JSON:
 }
 ```
 After a successful roast, saves to Supabase `roasts` table (fire-and-forget).
+
+#### Role Categories (6 values)
+| Category | Covers |
+|---|---|
+| `Tech & Engineering` | software, data, DevOps, ML, cloud, QA, security |
+| `Business & Corporate` | sales, marketing, finance, ops, HR, consulting, strategy |
+| `Creative` | design, UX, copywriting, art direction, film, video, content |
+| `Academic & Research` | PhD, postdoc, faculty, research scientist, lab roles |
+| `Executive & Leadership` | C-suite, VP, Director, board member, GM, Head of |
+| `Trades & Vocational` | nursing, skilled trades, construction, IT support, logistics |
+
+#### Scoring Model
+- **Temperature:** 0.6 (lowered from 0.9 for scoring consistency)
+- **5 anti-hallucination rules** enforced in system prompt: score only what's present, no benefit of doubt, every score must be defensible by pointing to specific resume text, no fabricated before/after examples, sparse resumes scored low on failing dimensions
+- Each dimension has **explicit score bands** (1-2, 3-4, 5-6, 7-8, 9-10) with concrete criteria
+- **Domain-specific adjustments**: Creative resumes not penalised for non-standard layouts; Academic CVs not penalised for length; Trades/Nursing checked for license/cert specificity with state and expiry
+- **ATS domain mapping**: Tech → Greenhouse; Business → Workday; Healthcare (Trades) → iCIMS; Finance → Taleo; Academic → Interfolio; Staffing/Trades → Bullhorn; Government → USAJobs
 
 ## Supabase Table
 
@@ -84,3 +103,6 @@ RLS is disabled. History is not exposed in the UI (privacy) but viewable in the 
 - **unpdf over pdf-parse** — pdf-parse crashes on Vercel because it probes for test fixture files at load time that don't exist in serverless deployments
 - **No history UI** — resume data is sensitive; roasts are saved for analytics but not shown to visitors
 - **Supabase save is fire-and-forget** — a DB failure never blocks the roast response returned to the user
+- **Role auto-detection** — model infers the target role and category from resume content so scoring weights are domain-appropriate rather than one-size-fits-all
+- **Temperature 0.6** — lower than default to reduce score variance across identical or near-identical resumes
+- **Research-backed rubrics** — system prompt bakes in recruiter priorities per domain (e.g. quantified metrics for Business roles, portfolio links for Creative, pub record for Academic, license specificity for Trades)
