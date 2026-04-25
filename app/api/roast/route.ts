@@ -40,12 +40,12 @@ Rules:
 
 export async function POST(request: NextRequest) {
   // Validate API key presence before doing anything else
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       {
-        error: "OpenAI API key is not configured.",
-        hint: "Set OPENAI_API_KEY in your .env.local file.",
+        error: "Groq API key is not configured.",
+        hint: "Set GROQ_API_KEY in your .env.local file.",
       },
       { status: 500 }
     );
@@ -77,12 +77,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Call OpenAI
-  const client = new OpenAI({ apiKey });
+  // Call Groq (OpenAI-compatible API)
+  const client = new OpenAI({
+    apiKey,
+    baseURL: "https://api.groq.com/openai/v1",
+  });
 
   try {
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "llama-3.3-70b-versatile",
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -137,14 +140,14 @@ export async function POST(request: NextRequest) {
 
       if (status === 401) {
         return NextResponse.json(
-          { error: "Invalid OpenAI API key. Check your OPENAI_API_KEY environment variable." },
+          { error: "Invalid Groq API key. Check your GROQ_API_KEY environment variable." },
           { status: 500 }
         );
       }
 
       if (status === 429) {
         return NextResponse.json(
-          { error: "OpenAI rate limit reached. Please wait a moment and try again." },
+          { error: "Groq rate limit reached. Please wait a moment and try again." },
           { status: 429 }
         );
       }

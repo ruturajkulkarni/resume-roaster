@@ -64,10 +64,12 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Image (JPG / PNG) — use OpenAI vision ---
+  // Groq doesn't support vision yet, so image OCR still uses OpenAI.
+  // If OPENAI_API_KEY is not set, ask the user to upload a PDF instead.
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OpenAI API key is not configured. Set OPENAI_API_KEY in .env.local." },
+      { error: "Image uploads require an OpenAI API key for OCR. Please upload a PDF instead, or add OPENAI_API_KEY to your environment." },
       { status: 500 }
     );
   }
