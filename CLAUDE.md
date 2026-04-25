@@ -84,6 +84,13 @@ After a successful roast, saves to Supabase `roasts` table (fire-and-forget).
 - **Domain-specific adjustments**: Creative resumes not penalised for non-standard layouts; Academic CVs not penalised for length; Trades/Nursing checked for license/cert specificity with state and expiry
 - **ATS domain mapping**: Tech → Greenhouse; Business → Workday; Healthcare (Trades) → iCIMS; Finance → Taleo; Academic → Interfolio; Staffing/Trades → Bullhorn; Government → USAJobs
 
+#### Roast & Tone Design
+- **Persona:** Gordon Ramsay-style critic — savage, funny, zero diplomatic softening. No "while your resume shows promise…" hedging.
+- **Roast field:** Opens with the single worst thing found (exact quote or close paraphrase), then twists the knife. Must sting. No filler openers.
+- **before field:** Exact quote or unmistakable paraphrase from the resume — the person must recognise it instantly.
+- **after field:** Full rewrite — strong action verb + specific metric + named tool/outcome. Not a minor word swap; the gap between before and after should be embarrassing for the before.
+- **vibe field:** Names the psychological pattern the resume reveals, then lands a specific burn tied to this resume.
+
 ## Supabase Table
 
 ```sql
@@ -106,3 +113,8 @@ RLS is disabled. History is not exposed in the UI (privacy) but viewable in the 
 - **Role auto-detection** — model infers the target role and category from resume content so scoring weights are domain-appropriate rather than one-size-fits-all
 - **Temperature 0.6** — lower than default to reduce score variance across identical or near-identical resumes
 - **Research-backed rubrics** — system prompt bakes in recruiter priorities per domain (e.g. quantified metrics for Business roles, portfolio links for Creative, pub record for Academic, license specificity for Trades)
+- **Savage roast persona** — Gordon Ramsay-style, leads with the worst finding, no softening; before/after rewrites must show a dramatic transformation not a minor tweak
+
+## Workflow
+Every change follows: edit code → `git add` + `git commit` + `git push origin main` → `vercel --prod --yes`
+GitHub and Vercel are always in sync.
