@@ -7,7 +7,6 @@ import {
   DragEvent,
   ChangeEvent,
 } from "react";
-import { supabase, HistoryItem } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,7 +34,7 @@ interface RoastResult {
   vibe: string;
 }
 
-type Status = "idle" | "extracting" | "roasting" | "done" | "error" | "history";
+type Status = "idle" | "extracting" | "roasting" | "done" | "error";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -67,16 +66,6 @@ function scoreColor(n: number): string {
   if (n <= 4) return "#ef4444";
   if (n <= 7) return "#eab308";
   return "#22c55e";
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -245,110 +234,6 @@ function LoadingView({ status }: { status: "extracting" | "roasting" }) {
 }
 
 // ---------------------------------------------------------------------------
-// History view
-// ---------------------------------------------------------------------------
-
-function HistoryView({
-  onBack,
-  onSelectItem,
-}: {
-  onBack: () => void;
-  onSelectItem: (item: HistoryItem) => void;
-}) {
-  const [items, setItems] = useState<HistoryItem[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  // Fetch on mount
-  useState(() => {
-    if (!supabase) {
-      setFetchError("Supabase is not configured.");
-      setLoading(false);
-      return;
-    }
-    supabase
-      .from("roasts")
-      .select("id, created_at, roast_response")
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data, error }) => {
-        if (error) {
-          setFetchError(error.message);
-        } else {
-          setItems(data as HistoryItem[]);
-        }
-        setLoading(false);
-      });
-  });
-
-  return (
-    <div className="flex flex-col min-h-screen bg-[#1a1a1a] px-4 py-10">
-      <div className="mx-auto w-full max-w-2xl">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={onBack}
-            className="text-white/50 hover:text-white transition-colors text-sm flex items-center gap-1"
-          >
-            ← Back
-          </button>
-          <h2 className="text-white text-xl font-bold">Roast History</h2>
-        </div>
-
-        {loading && (
-          <div className="text-center text-white/40 py-20">Loading…</div>
-        )}
-
-        {fetchError && (
-          <div className="rounded-xl bg-red-950/40 border border-red-800/50 px-4 py-3 text-sm text-red-300 text-center">
-            {fetchError}
-          </div>
-        )}
-
-        {!loading && !fetchError && items?.length === 0 && (
-          <div className="text-center text-white/40 py-20">
-            <p className="text-4xl mb-4">🔥</p>
-            <p>No roasts yet. Upload a resume to get started!</p>
-          </div>
-        )}
-
-        {items && items.length > 0 && (
-          <div className="space-y-3 animate-fade-in">
-            {items.map((item) => {
-              const overall = item.roast_response.score.overall;
-              const color = scoreColor(overall);
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onSelectItem(item)}
-                  className="w-full text-left rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 px-5 py-4 transition-all duration-150 group"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-white/40 mb-1">{formatDate(item.created_at)}</p>
-                      <p className="text-white/80 text-sm leading-snug line-clamp-2 group-hover:text-white transition-colors">
-                        &ldquo;{item.roast_response.roast}&rdquo;
-                      </p>
-                    </div>
-                    <div className="flex-shrink-0 text-right">
-                      <p className="text-xs text-white/30 mb-0.5">Score</p>
-                      <p className="text-2xl font-extrabold" style={{ color }}>
-                        {overall}
-                        <span className="text-sm text-white/30">/10</span>
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -360,8 +245,6 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [apiError, setApiError] = useState<string | null>(null);
   const [result, setResult] = useState<RoastResult | null>(null);
-  const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
-
   // --- File validation ---
   function validateAndSetFile(candidate: File) {
     if (!ACCEPTED_TYPES.includes(candidate.type)) {
@@ -460,27 +343,6 @@ export default function Home() {
     );
   }
 
-  if (status === "history") {
-    if (selectedHistoryItem) {
-      return (
-        <ResultsCard
-          result={selectedHistoryItem.roast_response}
-          fileName={`Roast from ${formatDate(selectedHistoryItem.created_at)}`}
-          primaryAction={{
-            label: "← Back to History",
-            onClick: () => setSelectedHistoryItem(null),
-          }}
-        />
-      );
-    }
-    return (
-      <HistoryView
-        onBack={() => setStatus("idle")}
-        onSelectItem={(item) => setSelectedHistoryItem(item)}
-      />
-    );
-  }
-
   // --- Upload UI ---
   return (
     <div className="flex flex-col min-h-screen bg-[#1a1a1a] text-white font-sans">
@@ -490,20 +352,7 @@ export default function Home() {
           <span className="text-2xl">🔥</span>
           <span className="text-xl font-bold tracking-tight">ResumeRoaster</span>
         </div>
-        <div className="flex items-center gap-4">
-          <p className="text-sm text-white/50 hidden sm:block">Get Roasted. Get Better.</p>
-          {supabase && (
-            <button
-              onClick={() => {
-                setSelectedHistoryItem(null);
-                setStatus("history");
-              }}
-              className="text-sm text-white/50 hover:text-white transition-colors flex items-center gap-1.5 border border-white/10 hover:border-white/30 rounded-full px-3 py-1.5"
-            >
-              📋 History
-            </button>
-          )}
-        </div>
+        <p className="text-sm text-white/50 hidden sm:block">Get Roasted. Get Better.</p>
       </header>
 
       {/* Main */}
